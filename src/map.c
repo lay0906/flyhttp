@@ -61,21 +61,90 @@ map_t *mapCreate(unsigned long size)
   return map; 
 }
 
-
-int mapAdd(map_t *map, char *key, char *value)
+static map_entry_t *mapFindMapEntry(map_t *map, char *key, int *ids)
 {
-  
-  return 0;
+  *ids = mapIndex(key, map->size);
+  map_entry_t *p = map->hash[*ids];
+  while(p != NULL)
+  {
+    if(!strcmp(key, p->key)) return p;
+    p = p->next;
+  }
+  return NULL;
 }
 
 
+char *mapFind(map_t *map, char *key)
+{
+  int ids;
+  map_entry_t *entry = mapFindMapEntry(map, key, &ids);
+  return entry == NULL ? NULL : entry->value;
+}
 
+static void expandMap(map_t *map)
+{
+   map->size *=1.5;
+   map->hash = (map_entry_t **)realloc(map->hash, sizeof(map_entry_t*)*map->size);
+}
+
+
+void mapModify(map_t *map, char *key, char *value)
+{
+  float factor = (float)(map->count*1.0/map->size);
+  if(factor > 0.75)
+    expandMap(map);
+  int ids;
+  map_entry_t *entry = mapFindMapEntry(map, key, &ids);
+  if(entry){
+     free(entry->value);
+     entry->value = value;
+  }else{
+     entry = (map_entry_t *)malloc(sizeof(map_entry_t));
+     entry->key = key;
+     entry->value = value;
+     entry->next = map->hash[ids];
+     map->hash[ids] = entry;
+  }
+}
+
+void mapFree(map_t *map)
+{
+  if(!map) return;
+  int i=0;
+  for(i;i<map->size;i++)
+  {
+    free(map->hash[i]);
+  }
+  free(map->hash);
+  free(map);
+}
+/*
 int main()
 {
-  char *s = "aaaaaaaaaa";
-  printf("%d", mapIndex(s, 10));
+  map_t *map = mapCreate(2);
+  mapModify(map, "a", "a");
+  mapModify(map, "b", "b");
+  mapModify(map, "c", "c");
+  mapModify(map, "d", "d");
+  mapModify(map, "e", "e");
 
-  map_t *map = mapCreate(10); 
+  char *v = mapFind(map, "a");
+  printf("v=%s\n", v);
+
+  v = mapFind(map, "b");
+  printf("v=%s\n", v);
+ 
+  v = mapFind(map, "c");
+  printf("v=%s\n", v);
+
+  v = mapFind(map, "d");
+  printf("v=%s\n", v);
+
+  v = mapFind(map, "e");
+  printf("v=%s\n", v);
+
+  mapFree(map);
+
   return 0;
 }
-
+*/

@@ -18,15 +18,16 @@ typedef struct map_s
 {
   map_entry_t **hash;
   unsigned long size;
+  unsigned long count;
 } map_t;
 
 unsigned int hash(char *key);
 
 /*api*/
 map_t *mapCreate(unsigned long size);
-int mapAdd(map_t *map, char *key, char *value);
+void mapModify(map_t *map, char *key, char *value);
 char* mapFind(map_t *map, char *key);
-int mapFree(map_t *map);
+void mapFree(map_t *map);
 
 
 
