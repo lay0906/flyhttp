@@ -56,6 +56,7 @@ static int mapIndex(char *key, int size)
 map_t *mapCreate(unsigned long size)
 {
   map_t *map = (map_t *)malloc(sizeof(map_t));
+  map->count = 0;
   map->size = size;
   map->hash = (map_entry_t **)malloc(size * sizeof(map_entry_t*));
   return map; 
@@ -90,9 +91,11 @@ static void expandMap(map_t *map)
 
 void mapModify(map_t *map, char *key, char *value)
 {
+ /*
   float factor = (float)(map->count*1.0/map->size);
   if(factor > 0.75)
     expandMap(map);
+ */
   int ids;
   map_entry_t *entry = mapFindMapEntry(map, key, &ids);
   if(entry){
@@ -103,6 +106,7 @@ void mapModify(map_t *map, char *key, char *value)
      entry->key = key;
      entry->value = value;
      entry->next = map->hash[ids];
+     map->count++;
      map->hash[ids] = entry;
   }
 }
@@ -118,10 +122,10 @@ void mapFree(map_t *map)
   free(map->hash);
   free(map);
 }
-/*
+
 int main()
 {
-  map_t *map = mapCreate(2);
+  map_t *map = mapCreate(100);
   mapModify(map, "a", "a");
   mapModify(map, "b", "b");
   mapModify(map, "c", "c");
@@ -147,4 +151,4 @@ int main()
 
   return 0;
 }
-*/
+
