@@ -1,8 +1,12 @@
-#include "map.h"
+#include "map2.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 
-unsigned int hash(char *key)
+unsigned int hash(void *k)
 {
+    char *key = (char *)k;
     uint32_t seed = 5381;
     const uint32_t m = 0x5bd1e995;
     const int r = 24;
@@ -44,111 +48,87 @@ unsigned int hash(char *key)
     return (unsigned int)h;
 }
 
-
-static int mapIndex(char *key, int size)
+static int __mask(int capacity)
 {
-   unsigned int h = hash(key);
-   int ids = h % size;
-   return ids;
-}
-
-
-map_t *mapCreate(unsigned long size)
-{
-  map_t *map = (map_t *)malloc(sizeof(map_t));
-  map->count = 0;
-  map->size = size;
-  map->hash = (map_entry_t **)malloc(size * sizeof(map_entry_t*));
-  return map; 
-}
-
-static map_entry_t *mapFindMapEntry(map_t *map, char *key, int *ids)
-{
-  *ids = mapIndex(key, map->size);
-  map_entry_t *p = map->hash[*ids];
-  while(p != NULL)
+  int s = 2;
+  while(s <= capacity)
   {
-    if(!strcmp(key, p->key)) return p;
+    s = s<<1;
+  }
+  return s - 1;
+}
+
+map_t *map_create(int capacity, map_type_t* type)
+{
+  map_t *map = (map_t*)malloc(sizeof(map_t));
+  map->capacity = capacity;
+  map->size = 0;
+  map->hash = (map_entry_t **)malloc(sizeof(map_entry_t*)*capacity);
+  memset(map->hash, 0, sizeof(map_entry_t*)*capacity);
+  map->type = type;
+ // map->mask = __mask(capacity);
+  return map;
+}
+
+static map_entry_t* __map_get(map_t *map, void *k, int *ids)
+{
+  unsigned int h = map_hash(map, k);
+  *ids = map_index(map, h);
+  map_entry_t *p = map->hash[*ids];
+  while(p){
+    if(!map_key_compare(map, k, p->k))
+       break;
     p = p->next;
   }
-  return NULL;
+  return p;
+}
+
+static void __map_expand(map_t *map)
+{
+   int l = map->capacity;
+   map->capacity *=1.5;
+   map_entry_t **p = (map_entry_t **)malloc(sizeof(map_entry_t*)*map->capacity);
+   memset(p, 0, map->capacity*sizeof(map_entry_t*));
+   int i;
+   for(i=0;i<l;i++)
+   {
+     map_entry_t *last = map->hash[i];
+     while(last){
+    	 map_entry_t *tmp = last->next;
+         int h = map_hash(map, last->k);
+    	 int ids = map_index(map, h);
+    	 last->next = p[ids];
+    	 p[ids] = last;
+    	 last = tmp;
+     }
+   }
+   free(map->hash);
+   map->hash = p;
 }
 
 
-char *mapFind(map_t *map, char *key)
+void map_put(map_t *map, void *k, void *v)
 {
+  if((float)(map->size*1.0/map->capacity) > 0.75) 
+     __map_expand(map);
   int ids;
-  map_entry_t *entry = mapFindMapEntry(map, key, &ids);
-  return entry == NULL ? NULL : entry->value;
-}
-
-static void expandMap(map_t *map)
-{
-   map->size *=1.5;
-   map->hash = (map_entry_t **)realloc(map->hash, sizeof(map_entry_t*)*map->size);
-}
-
-
-void mapModify(map_t *map, char *key, char *value)
-{
- /*
-  float factor = (float)(map->count*1.0/map->size);
-  if(factor > 0.75)
-    expandMap(map);
- */
-  int ids;
-  map_entry_t *entry = mapFindMapEntry(map, key, &ids);
-  if(entry){
-     free(entry->value);
-     entry->value = value;
+  map_entry_t *p = __map_get(map, k, &ids);
+  if(p){
+    map_free_val(map, p);
+    p->v = v;
   }else{
-     entry = (map_entry_t *)malloc(sizeof(map_entry_t));
-     entry->key = key;
-     entry->value = value;
-     entry->next = map->hash[ids];
-     map->count++;
-     map->hash[ids] = entry;
+    p = (map_entry_t*)malloc(sizeof(map_entry_t));
+    p->k = k;
+    p->v = v;
+    p->next = map->hash[ids];
+    map->hash[ids] = p;
+    map->size++;   
   }
 }
 
-void mapFree(map_t *map)
+void *map_get(map_t *map, void *k)
 {
-  if(!map) return;
-  int i=0;
-  for(i;i<map->size;i++)
-  {
-    free(map->hash[i]);
-  }
-  free(map->hash);
-  free(map);
+  int ids;
+  map_entry_t *p = __map_get(map, k, &ids); 
+  return p == NULL ? NULL : p->v;
 }
-
-int main()
-{
-  map_t *map = mapCreate(100);
-  mapModify(map, "a", "a");
-  mapModify(map, "b", "b");
-  mapModify(map, "c", "c");
-  mapModify(map, "d", "d");
-  mapModify(map, "e", "e");
-
-  char *v = mapFind(map, "a");
-  printf("v=%s\n", v);
-
-  v = mapFind(map, "b");
-  printf("v=%s\n", v);
- 
-  v = mapFind(map, "c");
-  printf("v=%s\n", v);
-
-  v = mapFind(map, "d");
-  printf("v=%s\n", v);
-
-  v = mapFind(map, "e");
-  printf("v=%s\n", v);
-
-  mapFree(map);
-
-  return 0;
-}
-
