@@ -54,86 +54,103 @@ void parse_error(int errcode)
 }
 
 
-http_req_t * parse_request(char *http, int n)
-{
-  http_req_t *req = (http_req_t*)malloc(sizeof(http_req_t));
 
-  char *cur = http;
-  char *prev = cur;
-  char *head_key;
-  int i = 0, j;
-  int s = 0;
-  int len;
-  char *tmp;
-  while(i++ < n)
-  { 
-    switch(s){
-      case 0:
-        if(*cur == ' ' || *cur == '\t' || *cur == '\r' || *cur == '\n'){
-           cur++;
-           prev++;
-        }else{
-          prev = cur;
-          cur++;
-          s = 1;
-        }
-        break;
-     case 1:
-       if(*cur != ' '){
-         cur++;
-       }else{
-          for(j=0;j<support_method_length;j++){
- 	     if(fly_strsecmp(support_method[j].method_name, prev, cur)){
-                req->reqline = (http_req_reqline_t *)malloc(sizeof(http_req_reqline_t));
-                req->reqline->method = support_method[j].type;
-                cur++;
-                prev = cur;
-                s = 2;
-                break;
-             }            
+
+void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
+{
+   int i=0,l,j;
+   while(i++<n){
+     switch(*s){
+        case 0:
+          if(**cur == ' ' || **cur == '\t' || **cur == '\r' || **cur == '\n' ) {
+            (*cur)++;
+            (*prev)++;
+          }else{
+            *prev = *cur;
+            (*cur)++;
+            *s = 1;
           }
-          if(j == support_method_length) parse_error(501); 
+          break;
+        case 1:
+          if(**cur != ' '){
+             (*cur)++;
+          }else{
+            for(j=0;j<support_method_length;j++){
+ 	       if(fly_strsecmp(support_method[j].method_name, *prev, *cur)){
+                  req->reqline = (http_req_reqline_t *)malloc(sizeof(http_req_reqline_t));
+                  req->reqline->method = support_method[j].type;
+                  (*cur)++;
+                  *prev = *cur;
+                  *s = 2;
+                  break;
+               }            
+             }
+             if(j == support_method_length) parse_error(501); 
+          }
+          break;
+        case 2:
+          if(**cur != ' ') {
+             (*cur)++;
+          }else{
+             l = *cur - *prev;
+             req->reqline->req_uri = (char *)malloc(sizeof(char)*(l+1));
+             strncpy(req->reqline->req_uri, *prev, l);
+             req->reqline->req_uri[l] = 0;
+             (*cur)++;
+             *prev = *cur;
+             *s = 3;
+          }
+          break;
+        case 3:
+          if(**cur != '\n'){ 
+              (*cur)++;
+          }else{
+              if(*(*cur-1) != '\r')
+                  parse_error(501);
+              if(fly_strsecmp("HTTP/1.1", *prev,*cur-1)){
+                  req->reqline->version = 1;
+                  (*cur)++;
+                  *prev = *cur;
+                  *s = 4;
+               } else
+                  parse_error(501);
+          }
+          default:
+           break;
        }
-       break;
-     case 2:
-       if(*cur != ' ') {
-         cur++;
-       }else{
-         req->reqline->req_uri = (char *)malloc(sizeof(char)*(cur-prev+1));
-         strncpy(req->reqline->req_uri, prev, cur-prev);
-         req->reqline->req_uri[cur-prev] = 0;
-         cur++;
-         prev = cur;
-         s = 3;
-       }
-       break;
-     case 3:
-       if(*cur != '\n'){ 
-         cur++;
-       }else{
-         if(*(cur-1) != '\r')
-             parse_error(501);
-         if(fly_strsecmp("HTTP/1.1", prev, cur-1)){
-             req->reqline->version = 1;
-             cur++;
-             prev = cur;
-             s = 4;
-         }
-         else
-            parse_error(501);
-       }
-     default:
-       break;
     }
-  }
-  return req;
 }
+
+
+
+
+void parse_http_req(http_req_t *req, char **cur, char **prev, int n, int *s)
+{
+  switch(*s){
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+      parse_http_reqline(req, cur, prev, n, s);
+      break;
+    default:
+      break;
+  }
+}
+
 
 int main()
 {
-  char *http = "DELETE /test.cgi HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-  http_req_t *req = parse_request(http, strlen(http));
+  char *http = "DELETE1 /tes1t.cgi HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+  char *cur = http, *prev = http;
+  int n = strlen(http);
+  int s = 0;
+  
+  http_req_t *req = (http_req_t *)malloc(sizeof(http_req_t));
+  parse_http_req(req,&cur,&prev,n,&s);
+
   printf("method=%s\n", support_method[req->reqline->method].method_name);
   printf("request_uri=%s\n", req->reqline->req_uri);
+  printf("http version=%d\n", req->reqline->version);
   return 0;
 }
