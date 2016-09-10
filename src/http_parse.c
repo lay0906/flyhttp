@@ -41,10 +41,19 @@ typedef struct http_req_s {
 } http_req_t;
 
 
-int fly_strsecmp(const char *src, const char *dest_s, const char *dest_e)
+int fly_strsecmp(const char *src, int n, const char *dest_s, const char *dest_e)
 {
-   while(dest_s < dest_e && (*src++ == *dest_s++)) ;
-   return dest_s == dest_e;
+  int dn = dest_e - dest_s, i;
+  n = (n >= dn) ? n : dn;
+  for(i = 0; i < n; i++)
+  {
+     if(*src == *dest_s){
+         src++;
+         dest_s++;
+     }else
+         break;
+  }
+  return dest_s == dest_e;
 }
 
 void parse_error(int errcode)
@@ -76,7 +85,7 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
              (*cur)++;
           }else{
             for(j=0;j<support_method_length;j++){
- 	       if(fly_strsecmp(support_method[j].method_name, *prev, *cur)){
+ 	       if(fly_strsecmp(support_method[j].method_name, support_method[j].method_length, *prev, *cur)){
                   req->reqline = (http_req_reqline_t *)malloc(sizeof(http_req_reqline_t));
                   req->reqline->method = support_method[j].type;
                   (*cur)++;
@@ -107,13 +116,13 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
           }else{
               if(*(*cur-1) != '\r')
                   parse_error(501);
-              if(fly_strsecmp("HTTP/1.1", *prev,*cur-1)){
+              if(fly_strsecmp("HTTP/1.1",8, *prev,*cur-1)){
                   req->reqline->version = 1;
                   (*cur)++;
                   *prev = *cur;
                   *s = 4;
                } else
-                  parse_error(501);
+                  parse_error(502);
           }
           default:
            break;
@@ -124,7 +133,7 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
 
 
 
-void parse_http_req(http_req_t *req, char **cur, char **prev, int n, int *s)
+int parse_http_req(http_req_t *req, char **cur, char **prev, int n, int *s)
 {
   switch(*s){
     case 0:
@@ -132,22 +141,50 @@ void parse_http_req(http_req_t *req, char **cur, char **prev, int n, int *s)
     case 2:
     case 3:
       parse_http_reqline(req, cur, prev, n, s);
+      return 0;
       break;
     default:
+      return -1;
       break;
   }
+  return -1;
 }
+
+
+static int _rand(int n)
+{
+   return rand()%n + 1;
+}
+
+static int _read(char *src,char *dest, int l)
+{
+  if(src == dest) return 0;
+  
+  int n = rand()%l + 1;
+  
+  if(src + n > dest)
+    return dest-src;
+  
+  return n;
+}
+
 
 
 int main()
 {
-  char *http = "DELETE1 /tes1t.cgi HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
-  char *cur = http, *prev = http;
-  int n = strlen(http);
-  int s = 0;
-  
+
+  char *http = "PUT /tes1t.cgi HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+
   http_req_t *req = (http_req_t *)malloc(sizeof(http_req_t));
-  parse_http_req(req,&cur,&prev,n,&s);
+  int i, l = strlen(http), n, s = 0;
+  char *cur = http, *prev = http, *last = http + l;
+  srand(time(NULL));
+
+  while((n = _read(cur, last, l)) > 0)
+  {  
+    if(parse_http_req(req, &cur, &prev, n, &s))
+        break;    
+  }
 
   printf("method=%s\n", support_method[req->reqline->method].method_name);
   printf("request_uri=%s\n", req->reqline->req_uri);
