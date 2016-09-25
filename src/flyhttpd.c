@@ -50,6 +50,24 @@ void resp(int fd, int respCode)
   Close(fd);
 }
 
+void resp_file(const char *path, int sockfd)
+{
+  char *msg = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; 
+  write(sockfd, msg, strlen(msg));
+ 
+  char *buf = (char *)malloc(sizeof(char) * 1024);
+  int n;
+  char sssss[100]="/opt/web";
+  strcat(sssss, path);
+  int fd = open(sssss, O_RDONLY);
+  while((n=read(fd, buf, 1024)) > 0){
+    write(sockfd, buf, n);
+  }
+  Close(fd);
+  Close(sockfd);
+}
+
+
 
 void echo(int fd)
 {
@@ -77,10 +95,8 @@ again:
   }
 end:
   if(s > 6){
-      printf("method=%s\n", support_method[req->reqline->method].method_name);
       printf("request_uri=%s\n", req->reqline->req_uri);
-      printf("http version=%d\n", req->reqline->version);
-      resp(fd, 200);
+      resp_file(req->reqline->req_uri, fd);
   }else{
      resp(fd, 400);
   }

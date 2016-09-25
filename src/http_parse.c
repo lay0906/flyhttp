@@ -174,7 +174,6 @@ int parse_http_reqheader(http_req_t *req, char **cur, char **prev, int *n, int *
            if(*(*cur-1) != '\r') return 400;
            v = (char *)malloc((*cur - *prev - 1)*sizeof(char));
            fly_strcpy(v, *prev,(*cur - 1));
-           printf("%s=%s\n", k, v);
            if(req->header == NULL)
               req->header = map_create(10,NULL);
            map_put(req->header, (void*)k, (void*)v);
