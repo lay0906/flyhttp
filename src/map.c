@@ -132,3 +132,14 @@ void *map_get(map_t *map, void *k)
   map_entry_t *p = __map_get(map, k, &ids); 
   return p == NULL ? NULL : p->v;
 }
+/*
+int main()
+{
+   char *a = "1", *b="2";
+   map_t *map = map_create(10, NULL);
+   map_put(map, a, b);
+   return 0;
+
+}
+*/
+

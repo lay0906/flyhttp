@@ -132,6 +132,18 @@ int Close(int fd)
 }
 
 
+int set_recv_timeout(int sockfd, int secs)
+{
+  struct timeval tv;
+  tv.tv_sec = secs;
+  tv.tv_usec = 0;
+  return setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+int recvn(int sockfd, void *buf, size_t nbytes)
+{
+  return recv(sockfd, buf, nbytes, MSG_WAITALL);
+}
 
 
 

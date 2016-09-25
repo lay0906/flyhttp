@@ -1,21 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "map.h"
-
-typedef enum http_req_method_e {
-  GET = 0,
-  POST,
-  PUT,
-  DELETE,
-  HEADER
-} http_req_method_t;
-
-typedef struct http_req_support_method_s {
-  http_req_method_t type;
-  char *method_name;
-  int method_length;
-} http_req_support_method_t;
+#include "http_parse.h"
 
 const http_req_support_method_t support_method[] = {
  {GET, "GET", 3},
@@ -27,18 +13,9 @@ const http_req_support_method_t support_method[] = {
 
 const int support_method_length =  sizeof(support_method)/sizeof(http_req_support_method_t);
 
-typedef struct http_req_reqline_s {
-  char method:5;
-  char version:3;
-  char *req_uri;
-} http_req_reqline_t;
 
 
 
-typedef struct http_req_s {
-  struct http_req_reqline_s *reqline;
-  map_t *header;
-} http_req_t;
 
 
 int fly_strsecmp(const char *src, int n, const char *dest_s, const char *dest_e)
@@ -56,6 +33,14 @@ int fly_strsecmp(const char *src, int n, const char *dest_s, const char *dest_e)
   return dest_s == dest_e;
 }
 
+
+int fly_strcpy(char *src, const char *dest_s, const char *dest_e)
+{
+  while(dest_s <  dest_e) *src++ = *dest_s++;
+  *src = '\0';
+  return 0;
+}
+
 void parse_error(int errcode)
 {
    printf("parse error:%d\n", errcode);
@@ -65,10 +50,10 @@ void parse_error(int errcode)
 
 
 
-void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
+int parse_http_reqline(http_req_t *req, char **cur, char **prev, int *n, int *s)
 {
    int i=0,l,j;
-   while(i++<n){
+   while(*n > 0){
      switch(*s){
         case 0:
           if(**cur == ' ' || **cur == '\t' || **cur == '\r' || **cur == '\n' ) {
@@ -83,6 +68,9 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
         case 1:
           if(**cur != ' '){
              (*cur)++;
+            #ifdef HTTP_METHOD_MAX_LENGTH
+             if(*cur - *prev > HTTP_METHOD_MAX_LENGTH) return 400;
+            #endif
           }else{
             for(j=0;j<support_method_length;j++){
  	       if(fly_strsecmp(support_method[j].method_name, support_method[j].method_length, *prev, *cur)){
@@ -94,7 +82,8 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
                   break;
                }            
              }
-             if(j == support_method_length) parse_error(501); 
+             if(j == support_method_length) 
+                return 501;
           }
           break;
         case 2:
@@ -115,39 +104,156 @@ void parse_http_reqline(http_req_t *req, char **cur, char **prev, int n, int *s)
               (*cur)++;
           }else{
               if(*(*cur-1) != '\r')
-                  parse_error(501);
+                  return 501;
               if(fly_strsecmp("HTTP/1.1",8, *prev,*cur-1)){
                   req->reqline->version = 1;
                   (*cur)++;
                   *prev = *cur;
                   *s = 4;
                } else
-                  parse_error(502);
+                  return 502;
           }
-          default:
+          break;
+         default: 
+           return 0;
            break;
        }
+       *n = *n - 1;
     }
+    return 0;
+}
+
+int parse_http_reqheader(http_req_t *req, char **cur, char **prev, int *n, int *s)
+{
+  int i=0;
+  char *k, *v;
+  while(*n > 0)
+  {
+    switch(*s){
+      case 4:
+        if(**cur == '\r'){
+           *s = 5;
+        }else {
+           *s = 6;
+        }
+        *prev = *cur;
+        (*cur)++;
+        break;
+      case 5:
+        if(**cur == '\n') {
+          *s = 10;
+          (*cur)++;
+        }
+        break;
+      case 6:
+        if(**cur != ':') (*cur)++;
+        else {
+          k = (char *)malloc((*cur-*prev + 1)*sizeof(char));
+          fly_strcpy(k, *prev, *cur);
+          (*cur)++;
+          *prev = *cur;
+          *s = 7;      
+        }
+        break;
+      case 7:
+        if(**cur == ' ' || **cur == '\t'){
+           (*cur)++;
+           *prev = *cur;
+        }else if(**cur == '\n'){
+           if(*(*cur-1) != '\r') return 400;
+           *s = 9;
+        }else {
+           *prev = *cur;
+           (*cur)++;
+           if(**prev != '\r')
+             *s = 8;
+        }
+        break;
+      case 8:
+        if(**cur == '\n'){
+           if(*(*cur-1) != '\r') return 400;
+           v = (char *)malloc((*cur - *prev - 1)*sizeof(char));
+           fly_strcpy(v, *prev,(*cur - 1));
+           printf("%s=%s\n", k, v);
+           if(req->header == NULL)
+              req->header = map_create(10,NULL);
+           map_put(req->header, (void*)k, (void*)v);
+           (*cur)++;
+           *prev = *cur;
+           *s = 9;
+        }else {
+           (*cur)++;
+        }
+        break;
+      case 9:
+       if(**cur == '\n'){
+         if(*(*cur - 1) != '\r') return 400;
+         (*cur)++;
+         *prev = *cur;
+         *s = 10;
+       }else{
+         *prev = *cur;
+         (*cur)++;
+         if(**prev != '\r')
+            *s = 6;
+       }
+       break;
+      default:
+        return 0;
+        break;
+    }
+    *n = *n - 1;
+  }
+  return 0;
+}
+
+int parse_http_reqbody(int sockfd, http_req_t *req, int *s)
+{
+  if(*s != 10)
+    return 400;
+  *s = 11;
+  void *length = map_get(req->header, "Content-Length");
+  if(length == NULL)
+    return 0;
+  int l = atoi((char *)length);
+  if(l == 0)
+    return 0;
+  char *buf = (char *)malloc(sizeof(char) * (l + 1));
+  recvn(sockfd, buf, l);
+  buf[l] = 0;
+  return 1;
 }
 
 
-
-
-int parse_http_req(http_req_t *req, char **cur, char **prev, int n, int *s)
+int parse_http_req(int sockfd, http_req_t *req, char **cur, char **prev, int *n, int *s)
 {
+  int ret = -1;
+  char *o = *cur;
+  while(*n > 0){
   switch(*s){
     case 0:
     case 1:
     case 2:
     case 3:
-      parse_http_reqline(req, cur, prev, n, s);
-      return 0;
+      ret = parse_http_reqline(req, cur, prev, n, s);
       break;
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+      ret = parse_http_reqheader(req, cur, prev, n ,s);
+      break;
+    case 10:
+      ret = parse_http_reqbody(sockfd, req, s);
     default:
       return -1;
       break;
   }
-  return -1;
+ }
+  if(*s ==10 && *n ==0) *s=11;
+  return ret;
 }
 
 
@@ -169,7 +275,7 @@ static int _read(char *src,char *dest, int l)
 }
 
 
-
+/*
 int main()
 {
 
@@ -190,4 +296,4 @@ int main()
   printf("request_uri=%s\n", req->reqline->req_uri);
   printf("http version=%d\n", req->reqline->version);
   return 0;
-}
+}*/

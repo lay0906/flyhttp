@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#include "http_parse.h"
 
 #define MAXLINE 4096
 #define BACKLOG 10
@@ -33,5 +34,8 @@ int create_server(int);
 int simple_connect(const char*, int);
 
 int Fork();
+
+int set_recv_timeout(int sockfd, int secs);
+int recvn(int sockfd, void *buf, size_t nbytes);
 
 #endif
