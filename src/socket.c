@@ -59,6 +59,13 @@ int simple_accept(int fd)
   return Accept(fd, (struct sockaddr *)&cliaddr, &len);
 }
 
+int simple_accept2(int fd, struct sockaddr_in *cli)
+{
+  int len = 3333;
+  return Accept(fd, (struct sockaddr*)cli, &len);
+}
+
+
 int simple_connect(const char *ip, int port)
 {
   if(ip == NULL) 

@@ -1,5 +1,5 @@
 #ifndef _MAP_H_
-#define _MAP_H_
+#define _MAP_H
 
 typedef struct map_entry_s
 {

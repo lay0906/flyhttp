@@ -72,7 +72,6 @@ map_t *map_create(int capacity, map_type_t* type)
 
 static map_entry_t* __map_get(map_t *map, void *k, int *ids)
 {
-  if(map == NULL) return NULL;
   unsigned int h = map_hash(map, k);
   *ids = map_index(map, h);
   map_entry_t *p = map->hash[*ids];

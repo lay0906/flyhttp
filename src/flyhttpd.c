@@ -1,106 +1,102 @@
 #include "all.h"
 
+http_server_t server;
 
-#define space(x) isspace((int)x)
+char ip[20];
 
-#define respMsg(rspCode, rspMsg) do { \
-      switch((rspCode)) { \
-       case 404: \
-          (rspMsg) = "404 Not Found"; break; \
-       case 501: \
-          (rspMsg) = "501 No Implemented"; break; \
-       case 505: \
-          (rspMsg) = "505 HTTP Version Not Supported"; break; \
-       case 200: \
-          (rspMsg) = "200 OK"; break; \
-       default: \
-          (rspMsg) = "400 Bad Request"; break; \
-      } \
-  }while(0)
-       
-         
+void initServer(http_server_t *pserv);
+http_client_t *initClient(int cfd, struct sockaddr_in *cli);
+void do_request(http_client_t *c);
+void do_response(http_client_t *c);
 
-extern const http_req_support_method_t support_method[];
-extern const int support_method_length;
-void echo(int);
 
 int main()
-{
- int servfd = create_server(7989);
- pid_t pid;
- printf("server[%d] start success\n ",7989 );
- for(;;)
- {
-   int cfd = simple_accept(servfd);
-   if((pid = Fork()) == 0){
-     Close(servfd);
-     echo(cfd);
-     exit(0);
+{  
+   initServer(&server);
+   printf("server [%d] start success\n", server.port);  
+
+   pid_t pid;
+   char ip[20];
+   struct sockaddr_in *cli;
+   while(1){
+      cli = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
+      memset(cli, 0, sizeof(struct sockaddr_in));
+      int cfd = simple_accept2(server.fd, cli);  
+
+      if((pid = Fork()) == 0){
+ //         Close(server.fd);
+          http_client_t *client = initClient(cfd, cli);
+          do_request(client);
+          free(client);
+      }      
+      else
+         Close(cfd);
    }
-   Close(cfd);
- }
- return 0;
+   return 0;
 }
 
-void resp(int fd, int respCode)
-{ 
-  char *msg;
-  respMsg(respCode, msg);
-  writen(fd, msg, strlen(msg)); //@TODO:remove strlen
-  Close(fd);
-}
-
-void resp_file(const char *path, int sockfd)
+void do_request(http_client_t *c)
 {
-  char *msg = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; 
-  write(sockfd, msg, strlen(msg));
- 
-  char *buf = (char *)malloc(sizeof(char) * 1024);
-  int n;
-  char sssss[100]="/opt/web";
-  strcat(sssss, path);
-  int fd = open(sssss, O_RDONLY);
-  while((n=read(fd, buf, 1024)) > 0){
-    write(sockfd, buf, n);
-  }
-  Close(fd);
-  Close(sockfd);
-}
-
-
-
-void echo(int fd)
-{
-  int sec = 90;
-  set_recv_timeout(fd, sec);
-  int n;
-  int s = 0;
-  char buf[MAXLINE];
-  char *cur = buf, *prev = buf;
-  http_req_t *req = (http_req_t *)malloc(sizeof(http_req_t));
+  printf("cli ip=%s, port=%d\n", c->client_ip, c->client_port); 
+  set_recv_timeout(c->cfd, 90);
+  c->in = (char *)malloc(sizeof(char)*1024);
+  c->parse_prev = c->parse_cur = c->in;
+  c->resp_code = 0;
 again:
-  n = read(fd, buf, MAXLINE);
-  if(n < 0 && errno == EINTR)
-     goto again;
-  else if(n == 0)
+  c->parse_n = read(c->cfd, c->in, 1024);
+  c->resp_code = parse_http_req(c);
+  if(!c->resp_code)
      goto end;
-  else {
-     int ret = parse_http_req(fd, req, &cur, &prev, &n, &s);
-     if(ret)
-       resp(fd, ret);
-     if(s>6)
-        goto end;
-     else
-        goto again;
-  }
+  if(c->parse_s == HTTPARSE_END)
+    goto end;
+  else
+    goto again;
+
 end:
-  if(s > 6){
-      printf("request_uri=%s\n", req->reqline->req_uri);
-      resp_file(req->reqline->req_uri, fd);
-  }else{
-     resp(fd, 400);
-  }
+   printf("method=%d,version=%d,req_uri=%s\n", c->method, c->version, c->req_uri);
+   do_response(c);
+   Close(c->cfd);
 }
+
+void do_response(http_client_t *c)
+{
+   char *resp; 
+   if(c->resp_code == HTTP_RESP_BADREQUEST){
+      resp = "HTTP/1.1 400 Bad Request\r\n\r\n400 Bad Request\r\n";
+   }
+   else if(c->resp_code == HTTP_RESP_NOT_SUPPORT){
+      resp = "HTTP/1.1 404 Page Not Found\r\n\r\n404 Page Not Found\r\n";
+   }
+   else {
+      resp = "HTTP/1.1 200 OK\r\n\r\n200 OK\r\n";
+   }
+   writen(c->cfd, resp, strlen(resp));
+}
+
+http_client_t *initClient(int cfd, struct sockaddr_in *cli)
+{
+   http_client_t *client = (http_client_t *)malloc(sizeof(http_client_t));
+   client->cfd = cfd;
+   client->client_ip = (char *)inet_ntop(AF_INET, &cli->sin_addr, ip, 20);    
+   client->client_port = ntohs(cli->sin_port);
+ 
+   client->parse_s = HTTPARSE_START;
+   client->parse_n = 0;
+   client->parse_cur = NULL;
+   client->parse_prev = NULL;
+   client->in = NULL;
+   client->out = NULL;
+   
+   return client;
+}
+
+void initServer(http_server_t *pserv)
+{
+   pserv->port = 8081;
+   pserv->web_path = "/opt/web";
+   pserv->fd = create_server(pserv->port);
+}
+
 
 
 

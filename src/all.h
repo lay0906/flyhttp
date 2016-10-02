@@ -15,10 +15,14 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#include "map.h"
+#include "flystring.h"
+#include "http.h"
 #include "http_parse.h"
 
 #define MAXLINE 4096
 #define BACKLOG 10
+
 
 void err_sys(char *fmt, ...);
 int Socket(int, int, int);
@@ -27,6 +31,8 @@ int Listen(int, int);
 int Accept(int, struct sockaddr *, socklen_t *);
 int Close(int);
 int simple_accept(int);
+int simple_accept2(int fd, struct sockaddr_in *cli);
+
 ssize_t readn(int, void *, size_t);
 ssize_t writen(int, const void *, size_t);
 

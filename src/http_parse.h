@@ -1,48 +1,25 @@
-#ifndef __HTTP_PARSE_H
-#define __HTTP_PARSE_H
+#ifndef __HTTP_PARSE2__
+#define __HTTP_PARSE2__
 
-#include "map.h"
+#include "http.h"
 
+#define HTTPARSE_START 0
+#define HTTPARSE_METHOD 1
+#define HTTPARSE_REQURI 2
+#define HTTPARSE_VER 3
+#define HTTPARSE_HEADER_START 4
+#define HTTPARSE_HEADER_CR 5
+#define HTTPARSE_HEADER_KEY 6
+#define HTTPARSE_HEADER_VAL1 7
+#define HTTPARSE_HEADER_VAL2 8
+#define HTTPARSE_HEADER_ONEEND 9
+#define HTTPARSE_BODY 10
+#define HTTPARSE_END 11
 
-#define HTTP_VERSION_MAX_LENGTH 8
-#define HTTP_METHOD_MAX_LENGTH 6
+int parse_http_req(http_client_t *c);
+int parse_http_reqline(http_client_t *c);
+int parse_http_reqheader(http_client_t *c);
+int parse_http_body(http_client_t *c);
 
-typedef enum http_req_method_e {
-  GET = 0,
-  POST,
-  PUT,
-  DELETE,
-  HEADER
-} http_req_method_t;
-
-typedef struct http_req_support_method_s {
-  http_req_method_t type;
-  char *method_name;
-  int method_length;
-} http_req_support_method_t;
-
-typedef struct http_req_reqline_s {
-  char method:5;
-  char version:3;
-  char *req_uri;
-} http_req_reqline_t;
-
-
-
-typedef struct http_req_s {
-  struct http_req_reqline_s *reqline;
-  map_t *header;
-} http_req_t;
-
-
-int fly_strsecmp(const char *src, int n, const char *dest_s, const char *dest_ea);
-void parse_error(int errcode);
-int parse_http_reqline(http_req_t *req, char **cur, char **prev, int *n, int *s);
-int parse_http_req(int sockfd, http_req_t *req, char **cur, char **prev, int *n, int *s);
-int parse_http_reqheader(http_req_t *req, char **cur, char **prev, int *n, int *s);
-int parse_http_reqbody(int sockfd, http_req_t *req, int *s);
-int fly_strcpy(char *src, const char *dest_s, const char *dest_e);
 
 #endif
-
-
