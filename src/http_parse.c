@@ -221,3 +221,89 @@ int parse_http_reqbody(http_client_t *c)
   c->body[l] = 0;
   return 0;
 }
+
+int parse_http_requri(http_client_t *c)
+{
+  char *url = c->req_uri;
+  if(url == NULL)
+     return HTTP_RESP_NOTFOUND;
+  if(*url != '/')
+     return 0;
+ 
+   int s = 0;
+   char *p1,*p2,*cur, *k, *v, *prev;
+   p1=p2=cur=url;
+   while(*cur != 0){
+      switch(s){
+          case 0:
+            if(*cur!='/'){
+               return HTTP_RESP_NOTFOUND;
+            }
+            s = 1;
+            break;
+          case 1:
+            if(*cur == ';'){
+               s = 2;
+               p2 = cur - 1;
+            }else if(*cur == '?'){
+               s = 3;
+               p2 = cur - 1;
+            }
+            break;
+          case 2:
+            if(*cur == '?'){
+               s = 3;
+            }
+            break;
+          case 3:
+            s = 4;
+            prev = cur;
+            break;
+           case 4:
+            if(*cur == '='){
+              k = (char *)malloc(sizeof(char)*(cur - prev));
+              fly_strcpy(k, prev, cur);
+              s = 5;
+            }
+            break;
+          case 5:
+            if(*cur == '&'){
+               s = 3;
+               break;
+            }
+            s = 6;
+            prev = cur;
+            break;
+          case 6:
+            if(*cur == '&' || *cur == '#'){
+              if(prev != cur){
+                  v = (char *)malloc(sizeof(char)*(cur - prev));
+                  fly_strcpy(v, prev, cur);
+                  if(c->args == NULL){
+                     c->args = map_create(10,NULL);
+                  }     
+                  map_put(c->args, k , v);                 
+                  *cur == '&' ? (s = 3) : (s = 7);
+              }
+            }
+            break;
+      }
+      if(s == 7) break;
+      cur++;
+   }
+   if(s != 7){
+     c->req_uri_end = cur - 1;
+   }else
+     c->req_uri_end = p2;
+   return 0;
+}
+
+
+
+
+
+
+
+
+
+

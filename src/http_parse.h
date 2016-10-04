@@ -20,6 +20,6 @@ int parse_http_req(http_client_t *c);
 int parse_http_reqline(http_client_t *c);
 int parse_http_reqheader(http_client_t *c);
 int parse_http_body(http_client_t *c);
-
+int parse_http_requri(http_client_t *c);
 
 #endif

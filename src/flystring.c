@@ -25,9 +25,6 @@ int fly_strsecmp(const char *src, const char *dest_s, const char *dest_e)
 
 void fly_tolower(char *src)
 {
- // if(src == NULL) return ;
-  
- // while(*src != 0) *src = tolower(*src++);
 }
 
 /*
@@ -46,6 +43,8 @@ int main()
    fly_strcpy(pss, dest_s, dest_e);
    printf("pss=%s\n", pss);
 
-   return 0;
+   char *us = "HELLO WorlD";
+   fly_tolower(us);
+   printf("us=%s\n", us);
 }
 */

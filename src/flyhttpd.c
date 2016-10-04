@@ -1,4 +1,12 @@
 #include "all.h"
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
+
 
 http_server_t server;
 
@@ -8,6 +16,7 @@ void initServer(http_server_t *pserv);
 http_client_t *initClient(int cfd, struct sockaddr_in *cli);
 void do_request(http_client_t *c);
 void do_response(http_client_t *c);
+void do_ok(http_client_t *c);
 
 
 int main()
@@ -58,19 +67,108 @@ end:
    Close(c->cfd);
 }
 
+
+void do_resp(const char *msg, http_client_t *c)
+{
+   writen(c->cfd, msg, strlen(msg));
+}
+
 void do_response(http_client_t *c)
 {
    char *resp; 
    if(c->resp_code == HTTP_RESP_BADREQUEST){
       resp = "HTTP/1.1 400 Bad Request\r\n\r\n400 Bad Request\r\n";
+      do_resp(resp,c);
+      return ;
    }
    else if(c->resp_code == HTTP_RESP_NOT_SUPPORT){
-      resp = "HTTP/1.1 404 Page Not Found\r\n\r\n404 Page Not Found\r\n";
+      resp = "HTTP/1.1 405 Method Not Allowed\r\n\r\n405 Method Not Allowed\r\n";
+      do_resp(resp,c);
+      return ;
+   }else if(c->resp_code == HTTP_RESP_NOTFOUND){
+     resp = "HTTP/1.1 404 Page Not Found\r\n\r\n404 Page Not Found\r\n";
+     do_resp(resp,c);
+     return ;
+   }else if(c->resp_code == HTTP_RESP_FORBIDDEN){
+     resp = "HTTP/1.1 403 Forbidden\r\n\r\n403 Forbidden\r\n";
+     do_resp(resp,c);
+     return ;
    }
    else {
-      resp = "HTTP/1.1 200 OK\r\n\r\n200 OK\r\n";
+      do_ok(c);
+      return ;
    }
-   writen(c->cfd, resp, strlen(resp));
+}
+
+void do_ok(http_client_t *c)
+{
+  char *req_uri = c->req_uri;
+  char *resp;
+  int filefd;
+  if(req_uri == NULL){
+     c->resp_code = HTTP_RESP_NOTFOUND;
+     do_response(c); 
+     return ;
+  }
+  parse_http_requri(c);
+   
+  char *path = (char *)malloc(sizeof(char) * (strlen(server.web_path) + c->req_uri_end - c->req_uri + 20));
+  char *p = path, *q = server.web_path;
+  while(*q!=0){
+     *p++ = *q++;
+  }
+  for(q=c->req_uri;q<=c->req_uri_end;q++){
+    *p++=*q;
+  }
+  *p = 0;
+  printf("path=%s\n", path);
+  
+
+  int _l = strlen(path);
+  if(path[_l-1]=='/'){
+     path = strcat(path, "index.html");
+  }
+
+  printf("path=%s\n", path);
+  struct stat st;
+  stat(path, &st);
+  
+  if(errno == ENOENT){
+     c->resp_code = HTTP_RESP_NOTFOUND;
+     do_response(c);
+     goto end;
+  }else  if((filefd = open(path, O_RDONLY)) < 0){
+     c->resp_code = HTTP_RESP_FORBIDDEN;
+     do_response(c);
+     goto end;
+  }
+  if(S_ISDIR(st.st_mode)){
+     //301
+     char *location = (char *)malloc(100);
+     *location = 0;
+     char *host = (char *)map_get(c->header, "Host");   
+     strcat(location, "http://");
+     strcat(location,host);
+     strcat(location,c->req_uri);
+     strcat(location, "/\r\n\r\n");
+     
+
+     char *msg= "HTTP/1.1 301 Move Permanently\r\nContent-Type: text/html\r\nLocation: ";
+     write(c->cfd, msg, strlen(msg));
+     write(c->cfd,location,strlen(location));
+  }else{
+     char *msg = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; 
+     write(c->cfd, msg, strlen(msg));
+
+     char *buf = (char *)malloc(sizeof(char) * 1024);
+     int n;
+     while((n=read(filefd, buf, 1024)) > 0){
+       write(c->cfd, buf, n);
+     }
+     Close(filefd);
+  }
+end:
+  free(path);
 }
 
 http_client_t *initClient(int cfd, struct sockaddr_in *cli)

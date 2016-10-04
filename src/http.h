@@ -8,6 +8,7 @@
 #define HTTP_RESP_OK 200
 
 #define HTTP_RESP_BADREQUEST 400
+#define HTTP_RESP_FORBIDDEN 403
 #define HTTP_RESP_NOTFOUND 404
 #define HTTP_RESP_NOT_SUPPORT 405
 
@@ -40,6 +41,7 @@ typedef struct http_client_s
   char method:5;
   char version:3;
   char *req_uri;
+  char *req_uri_end;
 
   map_t *header;
   map_t *args;
